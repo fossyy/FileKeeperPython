@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>FileKeeper - Download Page</title>
+</head>
+<body>
+    <h1>Uploaded Files</h1>
+    <ul>
+        {% for file in files %}
+            <li><a href="download/file/{{file}}" download>{{ file }}</a></li>
+        {% endfor %}
+    </ul>
+</body>
+</html>
