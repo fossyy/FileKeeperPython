@@ -3,7 +3,7 @@ import asyncio
 import hashlib
 import aiosqlite
 import json
-from quart import Quart, request, Response, send_file, redirect, url_for, render_template, session, abort, jsonify
+from quart import Quart, request, send_file, redirect, url_for, render_template, session, jsonify
 from pathlib import Path
 from werkzeug.utils import secure_filename
 
@@ -22,7 +22,6 @@ async def initialize_database():
 
 def is_login():
     username = session.get('username')
-    print(username)
     if username:
         return True
     else:
@@ -145,6 +144,7 @@ async def upload_file():
         return jsonify({"error": "No selected file."})
 
     filename = secure_filename(file.filename)
+    username = session.get('username')
     userid = session.get('userid')
 
     user_folder = get_user_folder(userid)
@@ -161,7 +161,7 @@ async def upload_file():
 
     if not filenames_json:
         filenames = {filename}
-        await c.execute("INSERT INTO uploaded_files (userid, foldername, filenames) VALUES (?, ?, ?)", (userid, user_folder, json.dumps(list(filenames))))
+        await c.execute("INSERT INTO uploaded_files (userid, username, foldername, filenames) VALUES (?, ?, ?, ?)", (userid, username, user_folder, json.dumps(list(filenames))))
     else:
         filenames = json.loads(filenames_json[0])
         filenames.append(filename)
