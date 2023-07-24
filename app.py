@@ -94,7 +94,8 @@ async def login():
 
 @app.route("/logout")
 async def logout():
-    session.pop('user', None)
+    session.pop('username', None)
+    session.pop('userid', None)
     return redirect(url_for('login'))
 
 @app.route("/download")
