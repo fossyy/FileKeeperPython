@@ -3,6 +3,7 @@ import asyncio
 import hashlib
 import aiosqlite
 import json
+import uuid
 from quart import Quart, request, send_file, redirect, url_for, render_template, session, jsonify
 from pathlib import Path
 from werkzeug.utils import secure_filename
@@ -15,7 +16,7 @@ app.config['MAX_CONTENT_LENGTH'] = 20 * 1024 * 1024
 async def initialize_database():
     conn = await aiosqlite.connect('main.db')
     c = await conn.cursor()
-    await c.execute('CREATE TABLE IF NOT EXISTS users (username TEXT , password_hash TEXT, userid INTEGER PRIMARY KEY AUTOINCREMENT)')
+    await c.execute('CREATE TABLE IF NOT EXISTS users (username TEXT , password_hash TEXT, userid TEXT PRIMARY KEY)')
     await c.execute('CREATE TABLE IF NOT EXISTS uploaded_files (userid INTEGER, username TEXT, foldername TEXT, filenames TEXT)')
     await conn.commit()
     await conn.close()
@@ -56,9 +57,8 @@ async def register():
         user = await cursor.fetchone()
         if user:
             return "Username sudah dipakai"
-        
-        await c.execute("INSERT INTO users (username, password_hash) VALUES (?, ?)", (username, password_hash))
-        userid = c.lastrowid
+        userid = str(uuid.uuid4())
+        await c.execute("INSERT INTO users (username, password_hash, userid) VALUES (?, ?, ?)", (username, password_hash, userid))
         await conn.commit()
         await conn.close()
 
@@ -112,16 +112,12 @@ async def download_page():
 
     if not filenames_json:
         return "No uploaded files found."
-
-    filenames = json.loads(filenames_json[0])
-    return await render_template('download.html', files=filenames)
-
-@app.route("/download/file/<string:filename>")
-async def download_file(filename):
-    if not is_login():
-        return redirect(url_for('login'))
-    
     userid = session.get('userid')
+    filenames = json.loads(filenames_json[0])
+    return await render_template('download.html', files=filenames, userid=userid)
+
+@app.route("/download/file/<string:userid>/<string:filename>")
+async def download_file(userid, filename):
     file_path = Path(f"app/{userid}/{filename}")
     if file_path.is_file():
         return await send_file(file_path, as_attachment=True)

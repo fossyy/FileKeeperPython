@@ -7,7 +7,7 @@
     <h1>Uploaded Files</h1>
     <ul>
         {% for file in files %}
-            <li><a href="download/file/{{file}}" download>{{ file }}</a></li>
+            <li><a href="download/file/{{userid}}/{{file}}" download>{{ file }}</a></li>
         {% endfor %}
     </ul>
 </body>
