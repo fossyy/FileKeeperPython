@@ -4,7 +4,7 @@ import hashlib
 import aiosqlite
 import json
 import uuid
-from quart import Quart, request, send_file, redirect, url_for, render_template, session, jsonify
+from quart import Quart, request, send_file, redirect, url_for, render_template, session, jsonify, make_response
 from pathlib import Path
 from werkzeug.utils import secure_filename
 
@@ -98,7 +98,7 @@ async def logout():
     session.pop('userid', None)
     return redirect(url_for('login'))
 
-@app.route("/download")
+@app.route("/download/")
 async def download_page():
     if not is_login():
         return redirect(url_for('index'))
@@ -117,12 +117,16 @@ async def download_page():
     return await render_template('download.html', files=filenames, userid=userid)
 
 @app.route("/download/file/<string:userid>/<string:filename>")
-async def download_file(userid, filename):
+async def download_file_path(userid, filename):
     file_path = Path(f"app/{userid}/{filename}")
     if file_path.is_file():
         return await send_file(file_path, as_attachment=True)
     else:
-        return "File not found", 404
+        return await make_response(jsonify({"message": "404: Not found"}), 404)
+    
+@app.route("/download/file/")
+async def download_file():
+    return await make_response(jsonify({"message": "401: Unauthorized"}), 401)
 
 @app.route('/upload', methods=['GET'])
 async def upload():
@@ -138,7 +142,7 @@ async def upload_file():
     data = await request.files
     file = data['file']
     if file.filename == '':
-        return jsonify({"error": "No selected file."})
+        return jsonify({"message": "400: No selected file."})
 
     filename = secure_filename(file.filename)
     username = session.get('username')
@@ -167,7 +171,7 @@ async def upload_file():
     await conn.commit()
     await conn.close()
 
-    return jsonify({"success": True})
+    return jsonify({"message": "200: Success"})
 
 if __name__ == "__main__":
     asyncio.run(initialize_database())
