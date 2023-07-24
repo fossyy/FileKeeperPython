@@ -56,13 +56,13 @@ async def register():
 
         user = await cursor.fetchone()
         if user:
-            return "Username sudah dipakai"
+            return await make_response(jsonify({"message": "409: Username already taken"}),409)
         userid = str(uuid.uuid4())
         await c.execute("INSERT INTO users (username, password_hash, userid) VALUES (?, ?, ?)", (username, password_hash, userid))
         await conn.commit()
         await conn.close()
 
-        return f"Registration successful, Your userid is {userid}"
+        return await make_response(jsonify({"message": f"200: Registration successful, Your userid is {userid}"}),200)
 
     return await render_template('register.html')
 
@@ -88,9 +88,30 @@ async def login():
             session['userid'] = user[2]
             return redirect(url_for('index'))
         else:
-            return "Invalid username or password"
+            return await make_response(jsonify({"message": "401: Invalid username or password"}),401)
     
     return await render_template('login.html')
+
+@app.route("/setting", methods=['GET', 'POST'])
+async def setting():
+    if not is_login():
+        return redirect(url_for('login'))
+
+    if request.method == 'POST':
+        form = await request.form
+        password = form["password"]
+
+        password_hash = hashlib.sha256(password.encode()).hexdigest()
+
+        conn = await aiosqlite.connect('main.db')
+        c = await conn.cursor()
+        await c.execute("UPDATE users SET password_hash = ? WHERE userid = ?", (password_hash, session['userid']))
+        await conn.commit()
+        await conn.close()
+
+        return await make_response(jsonify({"message": "200: Password change success"}),200)
+
+    return await render_template('setting.html', username=session.get('username'), userid=session.get('userid'))
 
 @app.route("/logout")
 async def logout():
@@ -111,7 +132,8 @@ async def download_page():
     await conn.close()
 
     if not filenames_json:
-        return "No uploaded files found."
+        return await make_response(jsonify({"message": "404: No uploaded files found"}),404)
+    
     userid = session.get('userid')
     files = json.loads(filenames_json[0])
     return await render_template('download.html', files=files, userid=userid)
