@@ -17,7 +17,7 @@ async def initialize_database():
     conn = await aiosqlite.connect('main.db')
     c = await conn.cursor()
     await c.execute('CREATE TABLE IF NOT EXISTS users (username TEXT , password_hash TEXT, userid TEXT PRIMARY KEY)')
-    await c.execute('CREATE TABLE IF NOT EXISTS uploaded_files (userid INTEGER, username TEXT, foldername TEXT, filenames TEXT)')
+    await c.execute('CREATE TABLE IF NOT EXISTS uploaded_files (userid STRING, username TEXT, foldername TEXT, files TEXT)')
     await conn.commit()
     await conn.close()
 
@@ -106,18 +106,26 @@ async def download_page():
     username = session.get('username')
     conn = await aiosqlite.connect('main.db')
     c = await conn.cursor()
-    cursor = await c.execute("SELECT filenames FROM uploaded_files WHERE username = ?", (username,))
+    cursor = await c.execute("SELECT files FROM uploaded_files WHERE username = ?", (username,))
     filenames_json = await cursor.fetchone()
     await conn.close()
 
     if not filenames_json:
         return "No uploaded files found."
     userid = session.get('userid')
-    filenames = json.loads(filenames_json[0])
-    return await render_template('download.html', files=filenames, userid=userid)
+    files = json.loads(filenames_json[0])
+    return await render_template('download.html', files=files, userid=userid)
 
-@app.route("/download/file/<string:userid>/<string:filename>")
-async def download_file_path(userid, filename):
+@app.route("/download/file/<string:userid>/<string:fileid>")
+async def download_file_path(userid, fileid):
+    conn = await aiosqlite.connect('main.db')
+    c = await conn.cursor()
+    cursor = await c.execute("SELECT files FROM uploaded_files WHERE userid = ?", (userid,))
+    data = await cursor.fetchone()
+    files_data = json.loads(data[0])
+    for file in files_data:
+        if file['id'] == fileid:
+            filename = file['name']
     file_path = Path(f"app/{userid}/{filename}")
     if file_path.is_file():
         return await send_file(file_path, as_attachment=True)
@@ -145,6 +153,7 @@ async def upload_file():
         return jsonify({"message": "400: No selected file."})
 
     filename = secure_filename(file.filename)
+    fileid = str(uuid.uuid4())
     username = session.get('username')
     userid = session.get('userid')
 
@@ -157,16 +166,29 @@ async def upload_file():
 
     conn = await aiosqlite.connect('main.db')
     c = await conn.cursor()
-    cursor = await c.execute("SELECT filenames FROM uploaded_files WHERE userid = ?", (userid,))
-    filenames_json = await cursor.fetchone()
+    cursor = await c.execute("SELECT files FROM uploaded_files WHERE userid = ?", (userid,))
+    files_json = await cursor.fetchone()
 
-    if not filenames_json:
-        filenames = {filename}
-        await c.execute("INSERT INTO uploaded_files (userid, username, foldername, filenames) VALUES (?, ?, ?, ?)", (userid, username, user_folder, json.dumps(list(filenames))))
+    if not files_json:
+        files = [{
+            "name": filename,
+            "id": fileid
+        }]
+        await c.execute("INSERT INTO uploaded_files (userid, username, foldername, files) VALUES (?, ?, ?, ?)", (userid, username, user_folder, json.dumps(list(files))))
     else:
-        filenames = json.loads(filenames_json[0])
-        filenames.append(filename)
-        await c.execute("UPDATE uploaded_files SET filenames = ? WHERE userid = ?", (json.dumps(list(filenames)), userid))
+        # Deserialize the JSON data retrieved from the database
+        files_data = json.loads(files_json[0])
+        dataDict = []
+        for file_entry in files_data:  # Use the variable `file_entry` to represent the dictionary in `files_data`
+            dataDict.append({
+                "name": file_entry["name"],
+                "id": file_entry["id"]
+            })
+        dataDict.append({
+            "name": filename,
+            "id": fileid
+        })
+        await c.execute("UPDATE uploaded_files SET files = ? WHERE userid = ?", (json.dumps(list(dataDict)), userid))
 
     await conn.commit()
     await conn.close()
