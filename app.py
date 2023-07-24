@@ -10,7 +10,7 @@ from werkzeug.utils import secure_filename
 
 app = Quart(__name__)
 app.secret_key = os.urandom(24) 
-app.config['MAX_CONTENT_LENGTH'] = 20 * 1024 * 1024  
+app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  
 # 20 x 1024 x 1024 adalah 20mb ini adalah max file yang bisa di upload ke backend
 
 async def initialize_database():
@@ -146,7 +146,8 @@ async def upload():
 @app.route('/upload', methods=['POST'])
 async def upload_file():
     if not is_login():
-        return redirect(url_for('login'))
+        return await make_response(jsonify({"message": "401: Unauthorized, please login first"}), 401)
+    
     data = await request.files
     file = data['file']
     if file.filename == '':
@@ -168,7 +169,7 @@ async def upload_file():
     c = await conn.cursor()
     cursor = await c.execute("SELECT files FROM uploaded_files WHERE userid = ?", (userid,))
     files_json = await cursor.fetchone()
-
+    
     if not files_json:
         files = [{
             "name": filename,
@@ -176,10 +177,16 @@ async def upload_file():
         }]
         await c.execute("INSERT INTO uploaded_files (userid, username, foldername, files) VALUES (?, ?, ?, ?)", (userid, username, user_folder, json.dumps(list(files))))
     else:
-        # Deserialize the JSON data retrieved from the database
         files_data = json.loads(files_json[0])
         dataDict = []
-        for file_entry in files_data:  # Use the variable `file_entry` to represent the dictionary in `files_data`
+        for file_entry in files_data:
+            if filename == file_entry['name']:
+                file_entry['id'] = fileid
+                await c.execute("UPDATE uploaded_files SET files = ? WHERE userid = ?", (json.dumps(list(files_data)), userid))
+                await conn.commit()
+                await conn.close()
+                return jsonify({"message": "200: File change was successful"})
+            
             dataDict.append({
                 "name": file_entry["name"],
                 "id": file_entry["id"]
